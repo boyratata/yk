@@ -9,23 +9,27 @@
   n.push(d.before("dispatch", a.FluxDispatcher, ([t]) => {
     if (t.type === "MESSAGE_UPDATE") {
       const original = c.get(t.channelId)?.get(t.message.id);
-      if (!original) return;
-      if (original.author?.bot) return;
-      if (original.content === t.message.content) return;
+      if (!original || original.author?.bot || original.content === t.message.content) return;
 
       const fakeId = `editlog-${original.id}-${Date.now()}`;
-      const clone = {
+      const fakeMsg = new E({
         ...original.toJS(),
         id: fakeId,
         content: `[edited] ${original.content}`,
+        timestamp: Date.now(),
         __vml_log: !0
-      };
-
-      a.FluxDispatcher.dispatch({
-        type: "MESSAGE_CREATE",
-        message: clone,
-        channelId: t.channelId
       });
+
+      const channel = c._channelMessages[t.channelId];
+      if (channel && !channel._messageMap.has(fakeId)) {
+        channel._messageMap.set(fakeId, fakeMsg);
+        channel._array.unshift(fakeMsg);
+        a.FluxDispatcher.dispatch({
+          type: "MESSAGE_UPDATE",
+          message: fakeMsg,
+          channelId: t.channelId
+        });
+      }
     }
   }));
 
@@ -45,6 +49,6 @@
     e.__vml_log = !!t.__vml_log;
   }));
 
-  const m = () => n.forEach(t => t());
+  const m = () => n.forEach(x => x());
   return l.onUnload = m, l;
-})(_, vendetta.metro, vendetta.metro.common, vendetta.patcher, vendetta.plugin, vendetta.ui.components, vendetta.ui.assets, vendetta.storage);
+})(_, vendetta.metro, vendetta.metro.common, vendetta.patcher, vendetta.plugin, vendetta.ui.components, vendetta.ui.assets, vendetta.storage);original.content
