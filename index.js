@@ -1,54 +1,50 @@
 (function(l, r, a, d, o, _, g, u) {
   "use strict";
-  const n = [], 
-        c = r.findByProps("_channelMessages"), 
-        i = r.findByProps("updateMessageRecord", "createMessageRecord"), 
-        E = r.findByName("MessageRecord", !1), 
-        f = r.findByName("RowManager");
+  const patches = [];
+  const MsgStore = r.findByProps("_channelMessages");
+  const MsgActions = r.findByProps("createMessageRecord", "updateMessageRecord");
+  const RowManager = r.findByName("RowManager");
+  const Dispatcher = a.FluxDispatcher;
 
-  n.push(d.before("dispatch", a.FluxDispatcher, ([t]) => {
-    if (t.type === "MESSAGE_UPDATE") {
-      const original = c.get(t.channelId)?.get(t.message.id);
-      if (!original || original.author?.bot || original.content === t.message.content) return;
+  patches.push(d.before("dispatch", Dispatcher, ([event]) => {
+    if (event.type !== "MESSAGE_UPDATE") return;
+    const orig = MsgStore.get(event.channelId)?.get(event.message.id);
+    if (!orig || orig.author?.bot || orig.content === event.message.content) return;
 
-      const fakeId = `editlog-${original.id}-${Date.now()}`;
-      const fakeMsg = new E({
-        ...original.toJS(),
-        id: fakeId,
-        content: `[edited] ${original.content}`,
-        timestamp: Date.now(),
-        __vml_log: !0
-      });
+    const fakeId = `editlog-${orig.id}-${Date.now()}`;
+    const fakeMsg = MsgActions.createMessageRecord({
+      ...orig.toJS(),
+      id: fakeId,
+      content: `[edited] ${orig.content}`,
+      timestamp: Date.now(),
+      __vml_log: true
+    });
 
-      const channel = c._channelMessages[t.channelId];
-      if (channel && !channel._messageMap.has(fakeId)) {
-        channel._messageMap.set(fakeId, fakeMsg);
-        channel._array.unshift(fakeMsg);
-        a.FluxDispatcher.dispatch({
-          type: "MESSAGE_UPDATE",
-          message: fakeMsg,
-          channelId: t.channelId
-        });
-      }
+    const channel = MsgStore._channelMessages[event.channelId];
+    if (channel?._messageMap.has(fakeId)) return;
+    channel._messageMap.set(fakeId, fakeMsg);
+    channel._array.unshift(fakeMsg);
+
+    Dispatcher.dispatch({ type: "MESSAGE_CREATE", message: fakeMsg, channelId: event.channelId });
+  }));
+
+  patches.push(d.after("generate", RowManager.prototype, ([row], props) => {
+    if (row.rowType === 1 && row.message.__vml_log) {
+      props.message.edited = "previous version";
+      props.backgroundHighlight = props.backgroundHighlight ?? {};
+      props.backgroundHighlight.backgroundColor = a.ReactNative.processColor("#facc1533");
+      props.backgroundHighlight.gutterColor = a.ReactNative.processColor("#facc15ff");
     }
   }));
 
-  n.push(d.after("generate", f.prototype, ([t], e) => {
-    if (t.rowType === 1 && t.message.__vml_log) {
-      e.message.edited = "previous version";
-      e.backgroundHighlight ??= {};
-      e.backgroundHighlight.backgroundColor = a.ReactNative.processColor("#facc1533");
-      e.backgroundHighlight.gutterColor = a.ReactNative.processColor("#facc15ff");
-    }
+  patches.push(d.after("createMessageRecord", MsgActions, ([data], out) => {
+    if (data.__vml_log) out.__vml_log = true;
   }));
 
-  n.push(d.after("createMessageRecord", i, function([t], e) {
-    if (t.__vml_log) e.__vml_log = !0;
-  }));
-  n.push(d.after("default", E, ([t], e) => {
-    e.__vml_log = !!t.__vml_log;
+  patches.push(d.after("default", r.findByName("MessageRecord", false), ([raw], inst) => {
+    if (raw.__vml_log) inst.__vml_log = true;
   }));
 
-  const m = () => n.forEach(x => x());
-  return l.onUnload = m, l;
-})(_, vendetta.metro, vendetta.metro.common, vendetta.patcher, vendetta.plugin, vendetta.ui.components, vendetta.ui.assets, vendetta.storage);original.content
+  l.onUnload = () => patches.forEach(p => p());
+  return l;
+})(_, vendetta.metro, vendetta.metro.common, vendetta.patcher, vendetta.plugin, vendetta.ui.components, vendetta.ui.assets, vendetta.storage);
